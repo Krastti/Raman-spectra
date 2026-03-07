@@ -399,6 +399,7 @@ class RamanDesignerGUI:
                                     bg=self.colors['bg'], fg=self.colors['secondary'])
         self.status_label.pack(side=tk.LEFT, padx=20, pady=10)
 
+        
         team = tk.Label(footer, text="Экзаменационная группа", font=('Helvetica', 9),
                        bg=self.colors['bg'], fg=self.colors['secondary'])
         team.pack(side=tk.RIGHT, padx=20, pady=10)
@@ -476,7 +477,7 @@ class RamanDesignerGUI:
                 confidence = float(probs[p_idx]) * 100
             except Exception:
                 confidence = 0.0
-            self.confidence_label.config(text=f"уверенность: {confidence:.1f}%")
+            self.confidence_label.config(text=f"")
             
             # Время и статус
             current_time = datetime.now().strftime("%H:%M")
@@ -513,4 +514,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()

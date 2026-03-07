@@ -36,15 +36,15 @@ class RamanDesignerGUI:
         self.setup_styles()
 
         # 🎯 Заглушки для архитектурных признаков (не влияют на предсказание)
-        self.dummy_x = 0.0  # Фиктивное значение X
-        self.dummy_y = 0.0  # Фиктивное значение Y
+        self.dummy_x = 0.0
+        self.dummy_y = 0.0
 
         # ✅ Сначала создаём интерфейс
         self.create_widgets()
         self.center_window()
         self.apply_styles()
         
-        # ✅ Потом загружаем модель (когда status_label уже существует)
+        # ✅ Потом загружаем модель
         self.load_model()
 
     def setup_colors(self):
@@ -100,136 +100,182 @@ class RamanDesignerGUI:
             self.status_label.config(text="ошибка загрузки", fg=self.colors['error'])
             print(f"Ошибка загрузки модели: {e}")
 
-    def predict_with_model(self, wave: float, intensity: float) -> tuple[str, np.ndarray]:
+    def predict_with_model(self, full_spectrum: np.ndarray = None, wave: float = None, intensity: float = None) -> tuple[str, np.ndarray]:
         """
-        Предсказание класса с помощью модели
+        Предсказание класса.
         
-        Ожидает 4 признака: [x, y, wave, intensity]
+        Приоритет: 
+        - Если передан full_spectrum → используем его как признаки
+        - Иначе → используем [dummy_x, dummy_y, wave, intensity] (старый режим)
+        
         Возвращает: (класс_как_строка, массив_вероятностей)
         """
         if self.model is None:
             pred_class = random.choice(self.classes)
             probs = np.array([0.33, 0.33, 0.34])
             return pred_class, probs
-        
+
         try:
-            # Подготовка признаков: [x, y, wave, intensity]
-            features = np.array([[
-                self.dummy_x,
-                self.dummy_y,
-                wave,
-                intensity
-            ]])
-            
-            # Предсказание
+            # Подготовка признаков
+            if full_spectrum is not None:
+                # Режим полного спектра
+                features = full_spectrum.reshape(1, -1)
+            else:
+                # Старый режим: 4 признака
+                features = np.array([[
+                    self.dummy_x,
+                    self.dummy_y,
+                    wave if wave is not None else 0.0,
+                    intensity if intensity is not None else 0.0
+                ]])
+
+            # Предсказание метки
             raw_pred = self.model.predict(features)[0]
-            
-            # 🔧 Конвертация предсказания в строку
-            # Если модель возвращает индексы (0,1,2) — мапим на названия классов
-            if isinstance(raw_pred, (int, np.integer)):
-                idx = int(raw_pred)
-                if 0 <= idx < len(self.classes):
-                    pred_class = self.classes[idx]
-                else:
-                    pred_class = random.choice(self.classes)  # fallback
-            else:
-                # Если модель уже возвращает строку
-                pred_class = str(raw_pred).strip().lower()
-                if pred_class not in self.classes:
-                    pred_class = random.choice(self.classes)  # fallback
-            
-            # Получение вероятностей
+
+            # Получаем классы модели
+            model_classes_raw = None
+            if hasattr(self.model, 'classes_'):
+                model_classes_raw = list(self.model.classes_)
+
+            # Получаем вероятности
+            probs_model = None
             if hasattr(self.model, 'predict_proba'):
-                probs = self.model.predict_proba(features)[0]
+                probs_model = self.model.predict_proba(features)[0]
+
+            # Выравнивание вероятностей по self.classes
+            probs_aligned = np.zeros(len(self.classes), dtype=float)
+
+            if probs_model is not None and model_classes_raw is not None:
+                for i, cls_val in enumerate(model_classes_raw):
+                    try:
+                        cls_str = str(cls_val).strip().lower()
+                    except Exception:
+                        cls_str = None
+
+                    target_idx = None
+                    if cls_str and cls_str in self.classes:
+                        target_idx = self.classes.index(cls_str)
+                    else:
+                        try:
+                            ci = int(float(cls_val))
+                            if 0 <= ci < len(self.classes):
+                                target_idx = ci
+                        except Exception:
+                            target_idx = None
+
+                    if target_idx is not None:
+                        probs_aligned[target_idx] = float(probs_model[i])
+
+                if probs_aligned.sum() == 0:
+                    probs_aligned = probs_model[:len(probs_aligned)] if len(probs_model) >= len(probs_aligned) else np.ones(len(self.classes)) / len(self.classes)
             else:
-                probs = np.ones(len(self.classes)) / len(self.classes)
-                probs[self.classes.index(pred_class)] = 0.98
-                
-            return pred_class, probs
-            
+                # Fallback без predict_proba
+                pred_idx = None
+                try:
+                    rp = str(raw_pred).strip().lower()
+                    if rp in self.classes:
+                        pred_idx = self.classes.index(rp)
+                    else:
+                        rpi = int(float(raw_pred))
+                        if 0 <= rpi < len(self.classes):
+                            pred_idx = rpi
+                except Exception:
+                    pred_idx = None
+
+                if pred_idx is None:
+                    probs_aligned = np.ones(len(self.classes)) / len(self.classes)
+                else:
+                    probs_aligned = np.ones(len(self.classes)) * 0.01
+                    probs_aligned[pred_idx] = 0.98
+
+            # Итоговый класс
+            best_idx = int(np.nanargmax(probs_aligned))
+            pred_class = self.classes[best_idx]
+
+            return pred_class, probs_aligned
+
         except Exception as e:
             print(f"Ошибка предсказания: {e}")
             return random.choice(self.classes), np.array([0.33, 0.33, 0.34])
 
-    def _interpolate_spectrum(self, wave: float, intensity: float, n_points: int = 100) -> np.ndarray:
+    def preprocess_full_spectrum(self, wave_axis: np.ndarray, intensity: np.ndarray, n_points: int = 200) -> np.ndarray:
         """
-        Интерполяция точки спектра до полного вектора признаков
-        (используйте, если модель обучена на полных спектрах)
-        """
-        # Заглушка: создаём простой гауссов пик вокруг точки
-        x = np.linspace(400, 1800, n_points)  # Типичный диапазон Raman
-        center = np.interp(wave, [400, 1800], [0, n_points-1])
-        sigma = 5  # Ширина пика
-        spectrum = intensity * np.exp(-((x - wave) ** 2) / (2 * sigma ** 2))
-        return spectrum.reshape(1, -1)
-
-    def preprocess_spectrum(self, wave: float, intensity: float, n_points: int = 200) -> tuple[float, np.ndarray]:
-        """
-        Robust preprocessing for a single point: synthesize a small spectrum
-        around the input, run the cleaning pipeline with defensive checks and
-        graceful fallbacks. Returns (value_at_wave, full_vector).
+        Полная предобработка спектра: интерполяция на единую сетку + пайплайн очистки.
+        Возвращает нормализованный вектор длиной n_points.
         """
         import math
         try:
-            n_points = max(50, int(n_points))
-            wave_axis = np.linspace(400.0, 1800.0, n_points)
-
-            # create synthetic spectrum and ensure numeric type
-            spectrum = self._interpolate_spectrum(float(wave), float(intensity), n_points=n_points).ravel().astype(float)
-
-            # basic sanity checks
-            if spectrum.size == 0 or wave_axis.size == 0 or math.isnan(spectrum).all():
-                raise ValueError('empty or invalid spectrum generated')
-
+            # 1. Интерполяция на единую сетку [400, 1800] см⁻¹
+            wave_axis = np.asarray(wave_axis, dtype=float).ravel()
+            intensity = np.asarray(intensity, dtype=float).ravel()
+            
+            # Убираем невалидные значения
+            mask = ~(np.isnan(wave_axis) | np.isnan(intensity) | np.isinf(wave_axis) | np.isinf(intensity))
+            wave_axis, intensity = wave_axis[mask], intensity[mask]
+            
+            if wave_axis.size < 10:
+                raise ValueError("Слишком мало точек в спектре")
+            
+            # Целевая сетка
+            target_wave = np.linspace(400.0, 1800.0, n_points)
+            
+            # Интерполяция (линейная, с экстраполяцией = 0)
+            f = interpolate.interp1d(wave_axis, intensity, 
+                                    kind='linear', 
+                                    bounds_error=False, 
+                                    fill_value=0.0)
+            spectrum = f(target_wave).astype(float)
             spectrum = np.nan_to_num(spectrum, nan=0.0, posinf=0.0, neginf=0.0)
-
-            if spectrum.size < 10:
-                return float(intensity), spectrum
-
-            # 1) Remove cosmic rays
+            
+            # 2. Удаление космических лучей
             try:
                 remover = CosmicRayRemover()
-                cr_removed, _ = remover.remove_cosmic_rays(wave_axis, spectrum, method='interpolation')
-                cr_removed = np.nan_to_num(cr_removed, nan=0.0, posinf=0.0, neginf=0.0)
+                spectrum, _ = remover.remove_cosmic_rays(target_wave, spectrum, method='interpolation')
             except Exception:
-                cr_removed = spectrum.copy()
-
-            # 2) Baseline correction
+                pass  # Оставляем как есть при ошибке
+            
+            # 3. Коррекция базовой линии
             try:
                 corrector = FluorescenceCorrector()
-                _, corrected = corrector.correct_baseline(wave_axis, cr_removed, method='poly', degree=5)
-                if corrected is None or len(corrected) == 0:
-                    corrected = cr_removed.copy()
+                _, spectrum = corrector.correct_baseline(target_wave, spectrum, method='poly', degree=5)
+                if spectrum is None or len(spectrum) == 0:
+                    raise ValueError("Baseline correction failed")
             except Exception:
-                corrected = cr_removed.copy()
-
-            if np.min(corrected) < 0:
-                corrected = corrected - np.min(corrected) + 1.0
-
-            # 3) Smoothing
+                pass
+            
+            # Сдвигаем, чтобы не было отрицательных значений
+            if np.min(spectrum) < 0:
+                spectrum = spectrum - np.min(spectrum) + 1e-3
+            
+            # 4. Сглаживание
             try:
                 smoother = SpectrumSmoother(method='savgol')
-                smoothed, _ = smoother.smooth(wave_axis, corrected, window_length=11, polyorder=3)
+                # Подбираем window_length под n_points (должно быть нечётным и < длины)
+                wl = min(11, n_points // 10)
+                if wl % 2 == 0: wl += 1
+                if wl >= 3:
+                    spectrum, _ = smoother.smooth(target_wave, spectrum, window_length=wl, polyorder=3)
             except Exception:
-                smoothed = corrected.copy()
-
-            # 4) Normalization
+                pass
+            
+            # 5. Нормализация (L2 / vector norm)
             try:
                 normalizer = SpectrumNormalizer(method='vector')
-                normalized, _ = normalizer.normalize(wave_axis, smoothed)
-                if normalized is None or len(normalized) == 0:
-                    normalized = smoothed.copy()
+                spectrum, _ = normalizer.normalize(target_wave, spectrum)
+                if spectrum is None or len(spectrum) == 0:
+                    raise ValueError("Normalization failed")
             except Exception:
-                normalized = smoothed.copy()
-
-            idx = int(np.argmin(np.abs(wave_axis - float(wave))))
-            val = float(normalized[idx]) if idx < len(normalized) else float(normalized[0])
-            return val, normalized
-
+                # Fallback: ручная L2-нормализация
+                norm = np.linalg.norm(spectrum)
+                if norm > 1e-10:
+                    spectrum = spectrum / norm
+            
+            return spectrum.astype(float).ravel()
+            
         except Exception as e:
-            print(f"Предобработка не удалась: {e}")
-            return float(intensity), np.array([float(intensity)])
-
+            print(f"Предобработка спектра не удалась: {e}")
+            # Возвращаем "безопасный" нулевой вектор
+            return np.zeros(n_points, dtype=float)
 
     def create_widgets(self):
         """Создание всех элементов интерфейса"""
@@ -276,7 +322,6 @@ class RamanDesignerGUI:
                 messagebox.showerror("Ошибка", f"Файл визуализации не найден:\n{script_path}")
                 return
 
-            # Запускаем отдельный процесс с тем же интерпретатором Python
             subprocess.Popen([sys.executable, script_path], cwd=os.path.dirname(script_path))
 
         except Exception as e:
@@ -295,7 +340,7 @@ class RamanDesignerGUI:
         separator = tk.Frame(card, bg=self.colors['border'], height=1, width=340)
         separator.place(x=30, y=45)
 
-        # Загрузка файла спектра (замена полей WAVE и INTENSITY)
+        # Загрузка файла спектра
         upload_label = tk.Label(card, text="Загрузите .txt файл спектра",
                     font=('Helvetica', 10, 'normal'), bg=self.colors['surface'],
                     fg=self.colors['secondary'])
@@ -360,7 +405,6 @@ class RamanDesignerGUI:
 
     def apply_styles(self):
         """Применение дополнительных стилей"""
-        # Нет полей ввода чисел: используем кнопку загрузки файла
         self.upload_button.bind('<Return>', lambda e: self.load_txt_file())
 
     def load_txt_file(self):
@@ -399,23 +443,21 @@ class RamanDesignerGUI:
             self.show_error(f'Не удалось загрузить файл: {e}')
 
     def predict_class(self):
-        """Предсказание класса с использованием модели"""
-        # Используем ранее загруженный спектр
+        """Предсказание класса с использованием всего спектра"""
         if getattr(self, 'loaded_wave_axis', None) is None or getattr(self, 'loaded_intensity', None) is None:
             self.show_error("Загрузите .txt файл спектра")
             return
 
         try:
-            # Берём пик максимальной интенсивности как репрезентативную точку
-            idx = int(np.nanargmax(self.loaded_intensity))
-            wave_val = float(self.loaded_wave_axis[idx])
-            int_val = float(self.loaded_intensity[idx])
-
-            # Предобработка входных данных (локальный быстрый пайплайн)
-            cleaned_val, _ = self.preprocess_spectrum(wave_val, int_val)
-
-            # Предсказание через модель (используем очищенное значение интенсивности)
-            pred_class, probs = self.predict_with_model(wave_val, cleaned_val)
+            # Предобработка ВСЕГО спектра
+            cleaned_spectrum = self.preprocess_full_spectrum(
+                self.loaded_wave_axis, 
+                self.loaded_intensity,
+                n_points=200  # Можно настроить под вашу модель
+            )
+            
+            # Предсказание через модель (передаём весь вектор)
+            pred_class, probs = self.predict_with_model(full_spectrum=cleaned_spectrum)
             
             # Обновляем результат
             self.result_value.config(text=pred_class.upper())
@@ -425,7 +467,15 @@ class RamanDesignerGUI:
             self.result_value.config(fg=colors.get(pred_class, self.colors['accent']))
             
             # Отображаем уверенность
-            confidence = probs[self.classes.index(pred_class)] * 100
+            try:
+                if hasattr(self.model, 'classes_'):
+                    model_cls = [str(c).strip().lower() for c in list(self.model.classes_)]
+                    p_idx = model_cls.index(pred_class) if pred_class in model_cls else self.classes.index(pred_class)
+                else:
+                    p_idx = self.classes.index(pred_class) if pred_class in self.classes else 0
+                confidence = float(probs[p_idx]) * 100
+            except Exception:
+                confidence = 0.0
             self.confidence_label.config(text=f"уверенность: {confidence:.1f}%")
             
             # Время и статус
@@ -436,10 +486,8 @@ class RamanDesignerGUI:
             # Сброс статуса
             self.root.after(3000, self.reset_status)
 
-        except ValueError:
-            self.show_error("Введите корректные числа")
         except Exception as e:
-            self.show_error(f"Ошибка: {str(e)[:30]}")
+            self.show_error(f"Ошибка: {str(e)[:40]}")
             print(f"Критическая ошибка: {e}")
 
     def show_error(self, message):

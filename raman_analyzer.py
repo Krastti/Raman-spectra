@@ -6,9 +6,7 @@ raman_analyzer.py v6.0
 """
 
 import os
-import sys
 import glob
-import json
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import numpy as np
@@ -19,10 +17,8 @@ from scipy.signal import savgol_filter, medfilt
 from scipy.ndimage import uniform_filter1d
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, f1_score
-import joblib
+from sklearn.metrics import confusion_matrix, accuracy_score, f1_score
 from datetime import datetime
 
 plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'SimHei']

@@ -24,16 +24,16 @@ def main():
     parser = argparse.ArgumentParser()
     default_root = os.path.join(os.getcwd(), "Хакatон_cleaned")
     parser.add_argument("--data-root", default=default_root)
-    parser.add_argument("--n-estimators", type=int, default=200)      # ← вместо epochs
+    parser.add_argument("--n-estimators", type=int, default=500)      # ← вместо epochs
     parser.add_argument("--learning-rate", type=float, default=0.1)
-    parser.add_argument("--max-depth", type=int, default=5)
+    parser.add_argument("--max-depth", type=int, default=6)
     parser.add_argument("--subsample", type=float, default=0.8)
     parser.add_argument("--out-dir", default="artifacts")
     parser.add_argument("--npy-x", default=None)
     parser.add_argument("--npy-y", default=None)
     parser.add_argument("--npy-files", default=None)
     parser.add_argument("--max-samples", type=int, default=0)
-    parser.add_argument("--early-stopping-rounds", type=int, default=50)  # ← для GBM
+    parser.add_argument("--early-stopping-rounds", type=int, default=100)  # ← для GBM
     args = parser.parse_args()
 
     if not os.path.exists(args.data_root):

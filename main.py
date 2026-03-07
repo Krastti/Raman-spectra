@@ -35,16 +35,16 @@ class RamanDesignerGUI:
         # Настройка стилей
         self.setup_styles()
 
-        # 🎯 Заглушки для архитектурных признаков (не влияют на предсказание)
+        # Заглушки для архитектурных признаков (не влияют на предсказание)
         self.dummy_x = 0.0
         self.dummy_y = 0.0
 
-        # ✅ Сначала создаём интерфейс
+        # Сначала создаём интерфейс
         self.create_widgets()
         self.center_window()
         self.apply_styles()
         
-        # ✅ Потом загружаем модель
+        # Потом загружаем модель
         self.load_model()
 
     def setup_colors(self):
@@ -516,3 +516,4 @@ def main():
 if __name__ == "__main__":
 
     main()
+

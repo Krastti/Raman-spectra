@@ -15,10 +15,7 @@ SEED = 42
 random.seed(SEED)
 np.random.seed(SEED)
 
-# ==========================================
 # СЕТКИ ПАРАМЕТРОВ ДЛЯ GRID SEARCH
-# ==========================================
-
 PARAM_GRIDS = {
     'small': {
         'n_estimators': [100, 150],
@@ -45,21 +42,21 @@ def main():
     parser = argparse.ArgumentParser()
     default_root = os.path.join(os.getcwd(), "Хакatон_cleaned")
 
-    # === Данные ===
+    # Данные
     parser.add_argument("--data-root", default=default_root)
     parser.add_argument("--npy-x", default=None)
     parser.add_argument("--npy-y", default=None)
     parser.add_argument("--npy-files", default=None)
     parser.add_argument("--max-samples", type=int, default=0)
 
-    # === Гиперпараметры модели ===
+    # Гиперпараметры модели
     parser.add_argument("--n-estimators", type=int, default=300)
     parser.add_argument("--learning-rate", type=float, default=0.05)
     parser.add_argument("--max-depth", type=int, default=4)
     parser.add_argument("--subsample", type=float, default=0.8)
     parser.add_argument("--early-stopping-rounds", type=int, default=20)
 
-    # === Grid Search ===
+    # Grid Search
     parser.add_argument("--use-grid-search", action="store_true",
                         help="Включить Grid Search для подбора параметров")
     parser.add_argument("--param-grid", type=str, default="medium",
@@ -73,7 +70,7 @@ def main():
     parser.add_argument("--n-jobs", type=int, default=-1,
                         help="Количество ядер CPU (-1 = все доступные)")
 
-    # === Вывод ===
+    # Вывод
     parser.add_argument("--out-dir", default="artifacts")
     parser.add_argument("--verbose", action="store_true")
 
@@ -82,9 +79,8 @@ def main():
     if not os.path.exists(args.data_root):
         raise SystemExit(f"Папка с данными не обнаружена: {args.data_root}")
 
-    # ==========================================
+    
     # 1. ЗАГРУЗКА ДАННЫХ
-    # ==========================================
     t0 = time.time()
 
     if args.npy_x and os.path.exists(args.npy_x):
@@ -121,9 +117,9 @@ def main():
     print(f"⏱ Загрузка данных: {time.time() - t0:.2f} сек")
     print(f"📊 Всего образцов: {len(X):,}")
 
-    # ==========================================
+
+    
     # 2. ОБРЕЗКА ДАННЫХ
-    # ==========================================
     if args.max_samples and 0 < args.max_samples < len(X):
         print(f"✂️ Обрезка данных: {len(X):,} → {args.max_samples:,} образцов")
         X = X[:args.max_samples]
@@ -131,9 +127,8 @@ def main():
         if files_per_row is not None:
             files_per_row = files_per_row[:args.max_samples]
 
-    # ==========================================
+
     # 3. СПЛИТ ПО ФАЙЛАМ
-    # ==========================================
     t1 = time.time()
 
     if files_per_row is not None:
@@ -170,9 +165,8 @@ def main():
 
     print(f"⏱ Сплит данных: {time.time() - t1:.2f} сек")
 
-    # ==========================================
+    
     # 4. НОРМАЛИЗАЦИЯ
-    # ==========================================
     t2 = time.time()
 
     scaler = StandardScaler()
@@ -184,23 +178,21 @@ def main():
 
     print(f"⏱ Нормализация: {time.time() - t2:.2f} сек")
 
-    # ==========================================
+
     # 5. ВЕСА КЛАССОВ
-    # ==========================================
     class_counts = np.bincount(y_train)
     class_weights = 1.0 / (class_counts + 1)
     class_weights = class_weights / class_weights.sum() * len(class_counts)
     sample_weights = np.array([class_weights[label] for label in y_train])
 
-    # ==========================================
+
     # 6. МОДЕЛЬ И ОБУЧЕНИЕ
-    # ==========================================
     t3 = time.time()
 
     os.makedirs(args.out_dir, exist_ok=True)
 
     if args.use_grid_search:
-        # ==================== GRID SEARCH ====================
+        # GRID SEARCH
         print(f"\n🔍 Grid Search: {args.param_grid} сетка, {args.cv_folds}-fold CV")
         print("=" * 80)
 
@@ -246,7 +238,7 @@ def main():
         print(f"💾 Результаты Grid Search сохранены в {args.out_dir}/grid_search_results.csv")
 
     else:
-        # ==================== ОБЫЧНОЕ ОБУЧЕНИЕ ====================
+        # ОБЫЧНОЕ ОБУЧЕНИЕ
         print(f"\n🚀 Обучение Gradient Boosting: {args.n_estimators} деревьев")
         print("=" * 80)
 
@@ -275,9 +267,8 @@ def main():
 
     print(f"⏱ Обучение завершено: {time.time() - t3:.2f} сек")
 
-    # ==========================================
+
     # 7. СОХРАНЕНИЕ И ОЦЕНКА
-    # ==========================================
     joblib.dump(model, os.path.join(args.out_dir, "best_model.joblib"))
     print(f"💾 Модель сохранена в {args.out_dir}/best_model.joblib")
 
@@ -298,9 +289,8 @@ def main():
         # Сохранение важности признаков
         np.save(os.path.join(args.out_dir, "feature_importances.npy"), model.feature_importances_)
 
-    # ==========================================
+
     # 8. ИТОГОВЫЙ ОТЧЁТ
-    # ==========================================
     report = {
         'train_samples': len(X_train),
         'val_samples': len(X_val),

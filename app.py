@@ -4,6 +4,8 @@ import numpy as np
 import joblib
 from scipy import interpolate
 import os
+import subprocess
+import sys
 import warnings
 import random
 from datetime import datetime
@@ -14,7 +16,7 @@ warnings.filterwarnings('ignore')
 class RamanDesignerGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("⚡ RAMAN • CLASSIFIER")
+        self.root.title("RAMAN - CLASSIFIER")
         self.root.geometry("480x620")
         self.root.resizable(False, False)
 
@@ -81,16 +83,16 @@ class RamanDesignerGUI:
         try:
             if os.path.exists(self.model_path):
                 self.model = joblib.load(self.model_path)
-                self.status_label.config(text="✓ модель загружена", fg=self.colors['success'])
-                print(f"✓ Модель загружена: {self.model_path}")
+                self.status_label.config(text="модель загружена", fg=self.colors['success'])
+                print(f"Модель загружена: {self.model_path}")
             else:
                 self.model = None
-                self.status_label.config(text="⚠ модель не найдена", fg=self.colors['error'])
-                print(f"⚠ Файл модели не найден: {self.model_path}")
+                self.status_label.config(text="модель не найдена", fg=self.colors['error'])
+                print(f"Файл модели не найден: {self.model_path}")
         except Exception as e:
             self.model = None
-            self.status_label.config(text="⚠ ошибка загрузки", fg=self.colors['error'])
-            print(f"✗ Ошибка загрузки модели: {e}")
+            self.status_label.config(text="ошибка загрузки", fg=self.colors['error'])
+            print(f"Ошибка загрузки модели: {e}")
 
     def predict_with_model(self, wave: float, intensity: float) -> tuple[str, np.ndarray]:
         """
@@ -140,7 +142,7 @@ class RamanDesignerGUI:
             return pred_class, probs
             
         except Exception as e:
-            print(f"✗ Ошибка предсказания: {e}")
+            print(f"Ошибка предсказания: {e}")
             return random.choice(self.classes), np.array([0.33, 0.33, 0.34])
 
     def _interpolate_spectrum(self, wave: float, intensity: float, n_points: int = 100) -> np.ndarray:
@@ -193,62 +195,18 @@ class RamanDesignerGUI:
         self.viz_button.config(bg=self.colors['viz_button'])
 
     def open_visualization(self):
-        """Открытие окна визуализации"""
-        viz_window = tk.Toplevel(self.root)
-        viz_window.title("📊 Визуализация спектра")
-        viz_window.geometry("500x400")
-        viz_window.configure(bg=self.colors['surface'])
+        """Запустить внешнее приложение визуализации (raman_analyzer.py)."""
+        try:
+            script_path = os.path.join(os.path.dirname(__file__), 'raman_analyzer.py')
+            if not os.path.exists(script_path):
+                messagebox.showerror("Ошибка", f"Файл визуализации не найден:\n{script_path}")
+                return
 
-        viz_window.update_idletasks()
-        x = (viz_window.winfo_screenwidth() // 2) - (500 // 2)
-        y = (viz_window.winfo_screenheight() // 2) - (400 // 2)
-        viz_window.geometry(f'+{x}+{y}')
+            # Запускаем отдельный процесс с тем же интерпретатором Python
+            subprocess.Popen([sys.executable, script_path], cwd=os.path.dirname(script_path))
 
-        title = tk.Label(viz_window, text="Визуализация спектральных данных",
-                        font=('Helvetica', 14, 'bold'), bg=self.colors['surface'], fg=self.colors['primary'])
-        title.pack(pady=20)
-
-        wave = self.wave_entry.get().strip()
-        intensity = self.intensity_entry.get().strip()
-
-        info_frame = tk.Frame(viz_window, bg=self.colors['surface'], 
-                             highlightbackground=self.colors['border'], highlightthickness=1)
-        info_frame.pack(pady=10, padx=40, fill=tk.X)
-
-        if wave and intensity:
-            try:
-                wave_val = float(wave)
-                int_val = float(intensity)
-                info_text = f"Текущая точка спектра:\nWave = {wave_val:.2f} cm⁻¹\nIntensity = {int_val:.2f}"
-
-                canvas = tk.Canvas(info_frame, width=400, height=150, bg='#F8F9FA', highlightthickness=0)
-                canvas.pack(pady=10)
-                canvas.create_line(50, 120, 350, 120, fill=self.colors['border'], width=2)
-                canvas.create_line(50, 20, 50, 120, fill=self.colors['border'], width=2)
-                points = [50, 120, 150, 40, 250, 80, 350, 100]
-                canvas.create_line(points, fill=self.colors['accent'], width=3, smooth=True)
-                x_pos = 50 + ((wave_val - 400) / 1400) * 300 if 400 <= wave_val <= 1800 else 200
-                y_pos = 120 - (int_val % 100)
-                canvas.create_oval(x_pos - 5, y_pos - 5, x_pos + 5, y_pos + 5, 
-                                fill=self.colors['viz_button'], outline='')
-            except:
-                info_text = "Некорректные данные для визуализации"
-        else:
-            info_text = "Введите данные спектра для визуализации"
-
-        info_label = tk.Label(info_frame, text=info_text, font=('Helvetica', 11),
-                             bg=self.colors['surface'], fg=self.colors['secondary'], justify=tk.CENTER)
-        info_label.pack(pady=10)
-
-        message_label = tk.Label(viz_window, text="🔧 Функция визуализации в разработке",
-                                font=('Helvetica', 10, 'italic'), bg=self.colors['surface'], fg=self.colors['secondary'])
-        message_label.pack(pady=20)
-
-        close_button = tk.Button(viz_window, text="ЗАКРЫТЬ", font=('Helvetica', 10, 'bold'),
-                                bg=self.colors['accent'], fg='white',
-                                activebackground=self.colors['accent_soft'], activeforeground='white',
-                                bd=0, cursor='hand2', command=viz_window.destroy, padx=30, pady=8)
-        close_button.pack(pady=20)
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось запустить визуализацию:\n{e}")
 
     def create_main_card(self, parent):
         """Создание центральной карточки"""
@@ -323,7 +281,7 @@ class RamanDesignerGUI:
         footer = tk.Frame(parent, bg=self.colors['bg'], height=40)
         footer.pack(side=tk.BOTTOM, fill=tk.X)
 
-        self.status_label = tk.Label(footer, text="⚡ ожидание ввода", font=('Helvetica', 9),
+        self.status_label = tk.Label(footer, text="ожидание ввода", font=('Helvetica', 9),
                                     bg=self.colors['bg'], fg=self.colors['secondary'])
         self.status_label.pack(side=tk.LEFT, padx=20, pady=10)
 
@@ -366,7 +324,7 @@ class RamanDesignerGUI:
             # Время и статус
             current_time = datetime.now().strftime("%H:%M")
             self.time_indicator.config(text=current_time)
-            self.status_label.config(text=f"✓ предсказано: {pred_class}", fg=self.colors['success'])
+            self.status_label.config(text=f"предсказано: {pred_class}", fg=self.colors['success'])
             
             # Сброс статуса
             self.root.after(3000, self.reset_status)
@@ -375,11 +333,11 @@ class RamanDesignerGUI:
             self.show_error("Введите корректные числа")
         except Exception as e:
             self.show_error(f"Ошибка: {str(e)[:30]}")
-            print(f"✗ Критическая ошибка: {e}")
+            print(f"Критическая ошибка: {e}")
 
     def show_error(self, message):
         """Показ ошибки"""
-        self.status_label.config(text=f"⚠ {message}", fg=self.colors['error'])
+        self.status_label.config(text=f"Ошибка: {message}", fg=self.colors['error'])
         self.result_value.config(text="—", fg=self.colors['accent'])
         self.confidence_label.config(text="")
         self.root.after(2000, self.reset_status)
@@ -387,9 +345,9 @@ class RamanDesignerGUI:
     def reset_status(self):
         """Сброс статуса"""
         if self.model is None:
-            self.status_label.config(text="⚠ модель не загружена", fg=self.colors['error'])
+            self.status_label.config(text="модель не загружена", fg=self.colors['error'])
         else:
-            self.status_label.config(text="⚡ ожидание ввода", fg=self.colors['secondary'])
+            self.status_label.config(text="ожидание ввода", fg=self.colors['secondary'])
 
 
 def main():

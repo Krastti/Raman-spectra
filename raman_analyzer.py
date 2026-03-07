@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-raman_analyzer.py v6.0
-Обработка ВЫКЛЮЧЕНА по умолчанию - применяется только по кнопке
+raman_analyzer.py v7.0
+Новые функции:
+- Выбор цвета для каждого спектра
+- Кнопка сброса всех изменений
 """
 
 import os
+import sys
 import glob
+import json
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox, colorchooser
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -17,12 +21,18 @@ from scipy.signal import savgol_filter, medfilt
 from scipy.ndimage import uniform_filter1d
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
 from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import confusion_matrix, accuracy_score, f1_score
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, f1_score
+import joblib
 from datetime import datetime
+import copy
 
 plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'SimHei']
 plt.rcParams['axes.unicode_minus'] = False
+
+import warnings
+warnings.filterwarnings('ignore')
 
 # Совместимость с NumPy 2.0+
 if hasattr(np, 'trapezoid'):
@@ -44,6 +54,14 @@ CONFIG = {
     'cv_folds': 5,
     'random_state': 42,
     'dpi': 150,
+}
+
+# Цвета по умолчанию для классов
+DEFAULT_COLORS = {
+    'control': '#2ecc71',
+    'endo': '#3498db',
+    'exo': '#e74c3c',
+    'unknown': '#95a5a6'
 }
 
 
@@ -105,10 +123,7 @@ def extract_label_from_path(filepath):
 # ПРЕДОБРАБОТКА
 # ============================================================================
 def preprocess_spectrum(df, config=CONFIG, apply_smooth=False, apply_baseline=False, apply_normalize=False):
-    """
-    Предобработка спектра
-    ПО УМОЛЧАНИЮ ВСЁ ВЫКЛЮЧЕНО
-    """
+    """Предобработка спектра"""
     wave = df['Wave'].values.astype(float).copy()
     intensity = df['Intensity'].values.astype(float).copy()
 
@@ -121,7 +136,6 @@ def preprocess_spectrum(df, config=CONFIG, apply_smooth=False, apply_baseline=Fa
     if len(wave) < 10:
         return wave, intensity
 
-    # 1. Сглаживание (только если включено)
     if apply_smooth:
         intensity = medfilt(intensity, kernel_size=3)
         window = min(config['smooth_window'], len(intensity) // 2 * 2 + 1)
@@ -130,7 +144,6 @@ def preprocess_spectrum(df, config=CONFIG, apply_smooth=False, apply_baseline=Fa
         if window >= 3:
             intensity = savgol_filter(intensity, window, config['smooth_polyorder'])
 
-    # 2. Базовая линия (только если включено)
     if apply_baseline:
         bl_window = min(config['baseline_window'], len(intensity) // 4)
         if bl_window > 1:
@@ -143,7 +156,6 @@ def preprocess_spectrum(df, config=CONFIG, apply_smooth=False, apply_baseline=Fa
             intensity = intensity - baseline + np.min(baseline)
             intensity = np.clip(intensity, 0, None)
 
-    # 3. Нормировка (только если включено)
     if apply_normalize:
         method = config['normalize_method']
         if method == 'area':
@@ -244,29 +256,32 @@ def train_classification_model(X, y, config=CONFIG):
 class RamanAnalyzerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("🔬 Рамановский Анализатор v6.0")
-        self.root.geometry("1400x900")
+        self.root.title("🔬 Рамановский Анализатор v7.0")
+        self.root.geometry("1600x1000")
 
+        # Данные
         self.spectra = []
+        self.original_spectra = []  # Копия оригинальных данных для сброса
         self.labels = []
         self.filepaths = []
         self.processed_spectra = []
+        self.custom_colors = {}  # {index: color}
         self.wave_axis = None
         self.X_matrix = None
         self.ml_results = None
         self.current_index = 0
 
-        # ВСЕ ЧЕКБОКСЫ ВЫКЛЮЧЕНЫ ПО УМОЛЧАНИЮ (value=False)
+        # Настройки
         self.show_all = tk.BooleanVar(value=False)
-        self.apply_smooth = tk.BooleanVar(value=False)  # ВЫКЛЮЧЕНО
-        self.apply_baseline = tk.BooleanVar(value=False)  # ВЫКЛЮЧЕНО
-        self.apply_normalize = tk.BooleanVar(value=False)  # ВЫКЛЮЧЕНО
+        self.apply_smooth = tk.BooleanVar(value=False)
+        self.apply_baseline = tk.BooleanVar(value=False)
+        self.apply_normalize = tk.BooleanVar(value=False)
 
         self.log_messages = []
 
         self.create_ui()
         self.show_welcome()
-        self.log("✅ Запущено | Обработка выключена по умолчанию")
+        self.log("✅ Запущено | Обработка выключена")
 
     def log(self, message):
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -276,7 +291,7 @@ class RamanAnalyzerApp:
         self.statusbar.config(text=message)
 
     def create_ui(self):
-        panel = ttk.Frame(self.root, width=350)
+        panel = ttk.Frame(self.root, width=400)
         panel.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)
         panel.pack_propagate(False)
 
@@ -285,6 +300,11 @@ class RamanAnalyzerApp:
         ttk.Button(panel, text="📂 Открыть папку", command=self.load_folder).pack(fill=tk.X, pady=3)
         ttk.Button(panel, text="🔄 Предобработать", command=self.preprocess_all).pack(fill=tk.X, pady=3)
         ttk.Button(panel, text="🤖 Обучить модель", command=self.train_model).pack(fill=tk.X, pady=3)
+
+        # НОВАЯ КНОПКА: Сброс
+        ttk.Button(panel, text="🔁 Сбросить всё", command=self.reset_all,
+                   style='Accent.TButton').pack(fill=tk.X, pady=3)
+
         ttk.Button(panel, text="🗑️ Очистить", command=self.clear_all).pack(fill=tk.X, pady=3)
 
         ttk.Separator(panel, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
@@ -313,20 +333,21 @@ class RamanAnalyzerApp:
         self.index_label = ttk.Label(panel, text="Файл: 0/0", font=('Consolas', 10))
         self.index_label.pack(pady=3)
 
+        # НОВАЯ КНОПКА: Выбор цвета
+        color_frame = ttk.Frame(panel)
+        color_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(color_frame, text="🎨 Цвет:").pack(side=tk.LEFT)
+        ttk.Button(color_frame, text="Выбрать", command=self.choose_color).pack(side=tk.LEFT, padx=5)
+        self.color_preview = tk.Canvas(color_frame, width=30, height=20, bg='#95a5a6')
+        self.color_preview.pack(side=tk.LEFT, padx=5)
+
         ttk.Separator(panel, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
 
-        # Обработка - БЕЗ АВТОМАТИЧЕСКОГО ПРИМЕНЕНИЯ
-        ttk.Label(panel, text="⚙️ Обработка (выключена)", font=('Arial', 11, 'bold')).pack(pady=3)
-
-        # Чекбоксы без command - не применяют автоматически
-        self.smooth_check = ttk.Checkbutton(panel, text="☐ Сглаживание", variable=self.apply_smooth)
-        self.smooth_check.pack(anchor=tk.W)
-
-        self.baseline_check = ttk.Checkbutton(panel, text="☐ Базовая линия", variable=self.apply_baseline)
-        self.baseline_check.pack(anchor=tk.W)
-
-        self.normalize_check = ttk.Checkbutton(panel, text="☐ Нормировка", variable=self.apply_normalize)
-        self.normalize_check.pack(anchor=tk.W)
+        # Обработка
+        ttk.Label(panel, text="⚙️ Обработка", font=('Arial', 11, 'bold')).pack(pady=3)
+        ttk.Checkbutton(panel, text="☐ Сглаживание", variable=self.apply_smooth).pack(anchor=tk.W)
+        ttk.Checkbutton(panel, text="☐ Базовая линия", variable=self.apply_baseline).pack(anchor=tk.W)
+        ttk.Checkbutton(panel, text="☐ Нормировка", variable=self.apply_normalize).pack(anchor=tk.W)
 
         ttk.Label(panel, text="→ Нажмите 'Предобработать' для применения",
                   font=('Arial', 9), foreground='gray').pack(anchor=tk.W, pady=5)
@@ -342,7 +363,7 @@ class RamanAnalyzerApp:
         graph_frame = ttk.Frame(self.root)
         graph_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        self.fig, self.ax = plt.subplots(figsize=(11, 8))
+        self.fig, self.ax = plt.subplots(figsize=(12, 8))
         self.canvas = FigureCanvasTkAgg(self.fig, graph_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
@@ -356,7 +377,7 @@ class RamanAnalyzerApp:
     def show_welcome(self):
         self.ax.clear()
         self.ax.text(0.5, 0.5,
-                     '👋 Загрузите файлы .txt\n\nФормат: X Y Wave Intensity\n\n⚙️ Обработка выключена по умолчанию\n→ Нажмите "Предобработать" для применения',
+                     '👋 Загрузите файлы .txt\n\nФормат: X Y Wave Intensity\n\n🎨 Можно менять цвет каждого спектра\n🔁 Кнопка сброса возвращает к оригиналу',
                      ha='center', va='center', fontsize=13, transform=self.ax.transAxes,
                      bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
         self.ax.set_xlim(0, 1)
@@ -378,13 +399,22 @@ class RamanAnalyzerApp:
 
     def add_files(self, files):
         loaded = 0
+        start_index = len(self.spectra)
+
         for filepath in files:
             df, error = load_spectrum(filepath)
             if df is not None:
                 label = extract_label_from_path(filepath)
+
+                # Сохраняем оригинальные данные для сброса
+                self.original_spectra.append(copy.deepcopy(df))
                 self.spectra.append(df)
                 self.labels.append(label)
                 self.filepaths.append(filepath)
+
+                # Устанавливаем цвет по умолчанию для класса
+                self.custom_colors[len(self.spectra) - 1] = DEFAULT_COLORS.get(label, '#95a5a6')
+
                 loaded += 1
                 self.log(f"✅ {os.path.basename(filepath)} ({len(df)} точек)")
             else:
@@ -394,7 +424,7 @@ class RamanAnalyzerApp:
                                      enumerate(self.filepaths)]
 
         if loaded > 0:
-            self.current_index = len(self.spectra) - loaded
+            self.current_index = start_index
             self.file_combo.current(self.current_index)
             self.update_stats()
             self.update_plot()
@@ -402,10 +432,13 @@ class RamanAnalyzerApp:
         self.log(f"📊 Загружено: {loaded}")
 
     def clear_all(self):
+        """Полная очистка всех данных"""
         self.spectra = []
+        self.original_spectra = []
         self.labels = []
         self.filepaths = []
         self.processed_spectra = []
+        self.custom_colors = {}
         self.wave_axis = None
         self.X_matrix = None
         self.ml_results = None
@@ -415,40 +448,109 @@ class RamanAnalyzerApp:
         self.stats_label.config(text="Файлов: 0")
         self.index_label.config(text="Файл: 0/0")
         self.show_welcome()
-        self.log("🗑️ Очищено")
+        self.log("🗑️ Все данные удалены")
+
+    def reset_all(self):
+        """
+        СБРОС ВСЕХ ИЗМЕНЕНИЙ
+        Возвращает спектры к оригинальному состоянию
+        """
+        if not self.spectra:
+            messagebox.showinfo("Сброс", "Нет данных для сброса")
+            return
+
+        result = messagebox.askyesno(
+            "Сброс всех изменений",
+            f"Вернуть все {len(self.spectra)} спектров к исходному состоянию?\n\n"
+            "Будет сброшено:\n"
+            "• Предобработка (сглаживание, базовая линия, нормировка)\n"
+            "• Пользовательские цвета\n"
+            "• Результаты ML модели"
+        )
+
+        if not result:
+            return
+
+        # Восстанавливаем оригинальные данные
+        self.spectra = [copy.deepcopy(df) for df in self.original_spectra]
+        self.processed_spectra = []
+        self.wave_axis = None
+        self.X_matrix = None
+        self.ml_results = None
+
+        # Сбрасываем цвета к умолчанию
+        self.custom_colors = {}
+        for i, label in enumerate(self.labels):
+            self.custom_colors[i] = DEFAULT_COLORS.get(label, '#95a5a6')
+
+        # Сбрасываем настройки обработки
+        self.apply_smooth.set(False)
+        self.apply_baseline.set(False)
+        self.apply_normalize.set(False)
+
+        self.current_index = 0
+        if self.file_combo['values']:
+            self.file_combo.current(0)
+
+        self.update_stats()
+        self.update_plot()
+
+        self.log("🔁 Все изменения сброшены к оригиналу")
+        messagebox.showinfo("Сброс", "✅ Все спектры возвращены к исходному состоянию")
+
+    def choose_color(self):
+        """Выбор цвета для текущего спектра"""
+        if not self.spectra:
+            messagebox.showwarning("Внимание", "Нет загруженных спектров")
+            return
+
+        # Текущий цвет
+        current_color = self.custom_colors.get(self.current_index,
+                                               DEFAULT_COLORS.get(self.labels[self.current_index], '#95a5a6'))
+
+        # Диалог выбора цвета
+        color = colorchooser.askcolor(color=current_color, title="Выберите цвет спектра")
+
+        if color[1]:  # Если цвет выбран
+            self.custom_colors[self.current_index] = color[1]
+            self.color_preview.config(bg=color[1])
+            self.update_plot()
+            self.log(f"🎨 Цвет спектра {self.current_index + 1} изменён на {color[1]}")
 
     def on_file_select(self):
         idx = self.file_combo.current()
         if idx >= 0 and idx < len(self.spectra):
             self.current_index = idx
+            # Обновляем превью цвета
+            color = self.custom_colors.get(self.current_index,
+                                           DEFAULT_COLORS.get(self.labels[self.current_index], '#95a5a6'))
+            self.color_preview.config(bg=color)
             self.update_plot()
 
     def prev_file(self):
         if len(self.spectra) > 0:
             self.current_index = (self.current_index - 1) % len(self.spectra)
             self.file_combo.current(self.current_index)
+            color = self.custom_colors.get(self.current_index,
+                                           DEFAULT_COLORS.get(self.labels[self.current_index], '#95a5a6'))
+            self.color_preview.config(bg=color)
             self.update_plot()
 
     def next_file(self):
         if len(self.spectra) > 0:
             self.current_index = (self.current_index + 1) % len(self.spectra)
             self.file_combo.current(self.current_index)
+            color = self.custom_colors.get(self.current_index,
+                                           DEFAULT_COLORS.get(self.labels[self.current_index], '#95a5a6'))
+            self.color_preview.config(bg=color)
             self.update_plot()
 
     def preprocess_all(self):
-        """
-        Предобработка ТОЛЬКО ПО КНОПКЕ
-        """
         if not self.spectra:
             messagebox.showwarning("Внимание", "Нет данных")
             return
 
-        # Показываем какие опции включены
-        smooth = "✓" if self.apply_smooth.get() else "✗"
-        baseline = "✓" if self.apply_baseline.get() else "✗"
-        normalize = "✓" if self.apply_normalize.get() else "✗"
-
-        self.log(f"⚙️ Обработка: Сглаживание={smooth}, Базовая={baseline}, Нормировка={normalize}")
+        self.log("⚙️ Обработка...")
         self.processed_spectra = []
 
         try:
@@ -472,21 +574,17 @@ class RamanAnalyzerApp:
             self.processed_spectra = []
 
     def update_plot(self):
-        """Обновление графика"""
         self.ax.clear()
 
         if not self.spectra:
             self.show_welcome()
             return
 
-        colors = {'control': 'green', 'endo': 'blue', 'exo': 'red', 'unknown': 'gray'}
-
         if self.current_index >= len(self.spectra):
             self.current_index = 0
 
         if self.show_all.get():
             for i in range(len(self.spectra)):
-                # Если есть обработанные - показываем их, иначе оригинальные
                 if self.processed_spectra and i < len(self.processed_spectra):
                     wave, intensity = self.processed_spectra[i]
                     title_extra = " (обр.)"
@@ -497,8 +595,9 @@ class RamanAnalyzerApp:
                     title_extra = " (ориг.)"
 
                 label = self.labels[i]
-                color = colors.get(label, 'gray')
-                self.ax.plot(wave, intensity, color=color, alpha=0.4, linewidth=0.7,
+                # Используем пользовательский цвет или цвет по умолчанию
+                color = self.custom_colors.get(i, DEFAULT_COLORS.get(label, '#95a5a6'))
+                self.ax.plot(wave, intensity, color=color, alpha=0.7, linewidth=1.0,
                              label=f"{label} #{i + 1}{title_extra}")
 
             self.ax.set_title(f'Все спектры ({len(self.spectra)})', fontsize=14, pad=15)
@@ -506,7 +605,6 @@ class RamanAnalyzerApp:
         else:
             df = self.spectra[self.current_index]
 
-            # Если есть обработанные - показываем их, иначе оригинальные
             if self.processed_spectra and self.current_index < len(self.processed_spectra):
                 wave, intensity = self.processed_spectra[self.current_index]
                 title_extra = " (обработанный)"
@@ -516,8 +614,9 @@ class RamanAnalyzerApp:
                 title_extra = " (оригинал)"
 
             label = self.labels[self.current_index]
-            color = colors.get(label, 'gray')
-            self.ax.plot(wave, intensity, color=color, linewidth=1.2,
+            # Используем пользовательский цвет или цвет по умолчанию
+            color = self.custom_colors.get(self.current_index, DEFAULT_COLORS.get(label, '#95a5a6'))
+            self.ax.plot(wave, intensity, color=color, linewidth=1.5,
                          label=f"{label}: {os.path.basename(self.filepaths[self.current_index])}")
             self.ax.set_title(f'Спектр {self.current_index + 1}/{len(self.spectra)}: {label}{title_extra}', fontsize=14,
                               pad=15)
@@ -579,10 +678,10 @@ class RamanAnalyzerApp:
 
 def main():
     print("=" * 60)
-    print("🔬 Рамановский Анализатор v6.0")
+    print("🔬 Рамановский Анализатор v7.0")
     print("=" * 60)
-    print("✅ Обработка ВЫКЛЮЧЕНА по умолчанию")
-    print("✅ Применяется только по кнопке 'Предобработать'")
+    print("🎨 Можно менять цвет каждого спектра")
+    print("🔁 Кнопка сброса возвращает к оригиналу")
     print("=" * 60)
 
     root = tk.Tk()

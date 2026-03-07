@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-raman_analyzer.py v7.0
-Новые функции:
-- Выбор цвета для каждого спектра
-- Кнопка сброса всех изменений
-"""
-
 import os
 import sys
 import glob
@@ -65,9 +56,6 @@ DEFAULT_COLORS = {
 }
 
 
-# ============================================================================
-# ЗАГРУЗКА ДАННЫХ
-# ============================================================================
 def load_spectrum(filepath):
     """Загрузка спектра из txt-файла"""
     try:
@@ -119,9 +107,7 @@ def extract_label_from_path(filepath):
     return 'unknown'
 
 
-# ============================================================================
 # ПРЕДОБРАБОТКА
-# ============================================================================
 def preprocess_spectrum(df, config=CONFIG, apply_smooth=False, apply_baseline=False, apply_normalize=False):
     """Предобработка спектра"""
     wave = df['Wave'].values.astype(float).copy()
@@ -196,9 +182,7 @@ def interpolate_to_common_wave(spectra, config=CONFIG):
         return None, []
 
 
-# ============================================================================
-# МАШИННОЕ ОБУЧЕНИЕ
-# ============================================================================
+# ОБУЧЕНИЕ
 def train_classification_model(X, y, config=CONFIG):
     """Обучение модели"""
     le = LabelEncoder()
@@ -250,9 +234,7 @@ def train_classification_model(X, y, config=CONFIG):
     }
 
 
-# ============================================================================
 # GUI ПРИЛОЖЕНИЕ
-# ============================================================================
 class RamanAnalyzerApp:
     def __init__(self, root):
         self.root = root
@@ -261,11 +243,11 @@ class RamanAnalyzerApp:
 
         # Данные
         self.spectra = []
-        self.original_spectra = []  # Копия оригинальных данных для сброса
+        self.original_spectra = []
         self.labels = []
         self.filepaths = []
         self.processed_spectra = []
-        self.custom_colors = {}  # {index: color}
+        self.custom_colors = {}
         self.wave_axis = None
         self.X_matrix = None
         self.ml_results = None
@@ -301,7 +283,7 @@ class RamanAnalyzerApp:
         ttk.Button(panel, text="🔄 Предобработать", command=self.preprocess_all).pack(fill=tk.X, pady=3)
         ttk.Button(panel, text="🤖 Обучить модель", command=self.train_model).pack(fill=tk.X, pady=3)
 
-        # НОВАЯ КНОПКА: Сброс
+        # Сброс
         ttk.Button(panel, text="🔁 Сбросить всё", command=self.reset_all,
                    style='Accent.TButton').pack(fill=tk.X, pady=3)
 
@@ -333,7 +315,7 @@ class RamanAnalyzerApp:
         self.index_label = ttk.Label(panel, text="Файл: 0/0", font=('Consolas', 10))
         self.index_label.pack(pady=3)
 
-        # НОВАЯ КНОПКА: Выбор цвета
+        # Выбор цвета
         color_frame = ttk.Frame(panel)
         color_frame.pack(fill=tk.X, pady=5)
         ttk.Label(color_frame, text="🎨 Цвет:").pack(side=tk.LEFT)
@@ -377,7 +359,7 @@ class RamanAnalyzerApp:
     def show_welcome(self):
         self.ax.clear()
         self.ax.text(0.5, 0.5,
-                     '👋 Загрузите файлы .txt\n\nФормат: X Y Wave Intensity\n\n🎨 Можно менять цвет каждого спектра\n🔁 Кнопка сброса возвращает к оригиналу',
+                     'Загрузите файлы .txt\n\nФормат: X Y Wave Intensity\n\n Можно менять цвет каждого спектра\n Кнопка сброса возвращает к оригиналу',
                      ha='center', va='center', fontsize=13, transform=self.ax.transAxes,
                      bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
         self.ax.set_xlim(0, 1)
@@ -550,7 +532,7 @@ class RamanAnalyzerApp:
             messagebox.showwarning("Внимание", "Нет данных")
             return
 
-        self.log("⚙️ Обработка...")
+        self.log("Обработка...")
         self.processed_spectra = []
 
         try:
@@ -658,7 +640,7 @@ class RamanAnalyzerApp:
         X = self.X_matrix[valid_idx]
         y = [self.labels[i] for i in valid_idx]
 
-        self.log("🤖 Обучение...")
+        self.log("Обучение...")
 
         try:
             self.ml_results = train_classification_model(X, y, CONFIG)

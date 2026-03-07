@@ -22,21 +22,20 @@ def _load_and_aggregate(fp):
     arr = np.atleast_2d(arr)
     features = None
     
-    # 1. Много строк, 4+ столбца → mean по строкам
+
     if arr.shape[1] >= 4:
         features = arr[:, :4].mean(axis=0)
-    # 2. 1 столбец, много строк → первые 4 строки
+
     elif arr.shape[1] == 1 and arr.shape[0] >= 4:
         features = arr[:4, 0]
-    # 3. 4+ строки, много столбцов → mean по первым 4 строкам
+
     elif arr.shape[0] >= 4:
         features = arr[:4, :4].mean(axis=0)
-    
-    # ФИЛЬТР: Если не получилось собрать 4 числа — выходим
+
     if features is None or features.size != 4:
         return None
     
-    # Принудительная конвертация в плоский массив float32
+
     features = np.array(features, dtype=np.float32).flatten()
     
     if features.shape != (4,):
@@ -52,14 +51,14 @@ class TxtDataset(Dataset):
     def __init__(self, root_dir, classes_map=None, max_workers=None):
         self.root_dir = root_dir
         self.classes_map = classes_map or CLASS_MAP
-        self.samples = []  # (features, label, file_id)
+        self.samples = []
         self.file_records = []
         self.max_workers = max_workers or (os.cpu_count() or 1)
         self._load_all_files()
 
     def _gather_file_list(self):
         files = []
-        # Проверка существования корневой папки
+
         if not os.path.exists(self.root_dir):
             return files
             
@@ -100,14 +99,14 @@ class TxtDataset(Dataset):
                 error_count += 1
                 continue
             
-            # ЖЁСТКАЯ ПРОВЕРКА: тип и форма
+
             if isinstance(features, np.ndarray) and features.shape == (4,):
                 self.file_records.append({"path": fp, "label": lbl, "id": file_id})
                 self.samples.append((features, lbl, file_id))
                 success_count += 1
             else:
                 error_count += 1
-                # Отладка: что именно пришло
+        
                 print(f"⚠️ Файл {fp}: неверная форма {type(features)} {getattr(features, 'shape', 'no shape')}")
         
         print(f"✅ Успешно загружено: {success_count} файлов")
@@ -130,12 +129,12 @@ class TxtDataset(Dataset):
                 np.array([], dtype=np.int32)
             )
         
-        # Извлекаем данные
+
         xs = [s[0] for s in self.samples]
         ys = [s[1] for s in self.samples]
         files = [s[2] for s in self.samples]
         
-        # Отладка: проверяем типы перед vstack
+
         for i, x in enumerate(xs[:5]):
             if not isinstance(x, np.ndarray):
                 print(f"⚠️ xs[{i}] это {type(x)}, конвертируем...")
@@ -144,9 +143,9 @@ class TxtDataset(Dataset):
                 print(f"⚠️ xs[{i}] имеет форму {x.shape}, пытаемся исправить...")
                 xs[i] = np.array(x, dtype=np.float32).flatten()[:4]
                 if xs[i].shape != (4,):
-                    xs[i] = np.pad(xs[i], (0, 4-len(xs[i]))) # Дополняем нулями если мало
+                    xs[i] = np.pad(xs[i], (0, 4-len(xs[i])))
         
-        # Финальная проверка
+
         shapes = [x.shape for x in xs]
         if len(set(shapes)) > 1:
             print(f"❌ Разные формы массивов: {set(shapes)}")
@@ -171,3 +170,4 @@ class TxtDataset(Dataset):
                 np.array([], dtype=np.int32)
 
             )
+

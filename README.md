@@ -59,7 +59,9 @@ pip install -r requirements.txt
 * Выберите файл со спектром в формате .txt
 * Имя файла отобразится рядом с кнопкой
 * В статусной строке появится: "файл загружен: <имя_файла>"
-  
+
+  <img width="589" height="808" alt="image" src="https://github.com/user-attachments/assets/b8f6b458-8bf4-4aaa-a34d-e5f7eb510d03" />
+
  Шаг 2: Классификация
  
 * Убедитесь, что файл успешно загружен

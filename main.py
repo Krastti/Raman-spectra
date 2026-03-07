@@ -29,16 +29,16 @@ class RamanDesignerGUI:
         # Настройка стилей
         self.setup_styles()
 
-        # 🎯 Заглушки для архитектурных признаков (не влияют на предсказание)
+        # Заглушки для архитектурных признаков (не влияют на предсказание)
         self.dummy_x = 0.0  # Фиктивное значение X
         self.dummy_y = 0.0  # Фиктивное значение Y
 
-        # ✅ Сначала создаём интерфейс
+        # создаём интерфейс
         self.create_widgets()
         self.center_window()
         self.apply_styles()
         
-        # ✅ Потом загружаем модель (когда status_label уже существует)
+        # загружаем модель (когда status_label уже существует)
         self.load_model()
 
     def setup_colors(self):
@@ -118,7 +118,7 @@ class RamanDesignerGUI:
             # Предсказание
             raw_pred = self.model.predict(features)[0]
             
-            # 🔧 Конвертация предсказания в строку
+            # Конвертация предсказания в строку
             # Если модель возвращает индексы (0,1,2) — мапим на названия классов
             if isinstance(raw_pred, (int, np.integer)):
                 idx = int(raw_pred)
@@ -358,4 +358,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()

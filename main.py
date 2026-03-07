@@ -25,7 +25,7 @@ class RamanDesignerGUI:
         self.model = None
         self.classes = ['control', 'endo', 'exo']
         self.model_path = "raman_model.joblib"
-        
+
         # Настройка стилей
         self.setup_styles()
 
@@ -37,7 +37,7 @@ class RamanDesignerGUI:
         self.create_widgets()
         self.center_window()
         self.apply_styles()
-        
+
         # загружаем модель (когда status_label уже существует)
         self.load_model()
 
@@ -97,7 +97,7 @@ class RamanDesignerGUI:
     def predict_with_model(self, wave: float, intensity: float) -> tuple[str, np.ndarray]:
         """
         Предсказание класса с помощью модели
-        
+
         Ожидает 4 признака: [x, y, wave, intensity]
         Возвращает: (класс_как_строка, массив_вероятностей)
         """
@@ -105,7 +105,7 @@ class RamanDesignerGUI:
             pred_class = random.choice(self.classes)
             probs = np.array([0.33, 0.33, 0.34])
             return pred_class, probs
-        
+
         try:
             # Подготовка признаков: [x, y, wave, intensity]
             features = np.array([[
@@ -114,12 +114,11 @@ class RamanDesignerGUI:
                 wave,
                 intensity
             ]])
-            
+
             # Предсказание
             raw_pred = self.model.predict(features)[0]
-            
+
             # Конвертация предсказания в строку
-            # Если модель возвращает индексы (0,1,2) — мапим на названия классов
             if isinstance(raw_pred, (int, np.integer)):
                 idx = int(raw_pred)
                 if 0 <= idx < len(self.classes):
@@ -127,20 +126,19 @@ class RamanDesignerGUI:
                 else:
                     pred_class = random.choice(self.classes)  # fallback
             else:
-                # Если модель уже возвращает строку
                 pred_class = str(raw_pred).strip().lower()
                 if pred_class not in self.classes:
                     pred_class = random.choice(self.classes)  # fallback
-            
+
             # Получение вероятностей
             if hasattr(self.model, 'predict_proba'):
                 probs = self.model.predict_proba(features)[0]
             else:
                 probs = np.ones(len(self.classes)) / len(self.classes)
                 probs[self.classes.index(pred_class)] = 0.98
-                
+
             return pred_class, probs
-            
+
         except Exception as e:
             print(f"Ошибка предсказания: {e}")
             return random.choice(self.classes), np.array([0.33, 0.33, 0.34])
@@ -150,12 +148,76 @@ class RamanDesignerGUI:
         Интерполяция точки спектра до полного вектора признаков
         (используйте, если модель обучена на полных спектрах)
         """
-        # Заглушка: создаём простой гауссов пик вокруг точки
-        x = np.linspace(400, 1800, n_points)  # Типичный диапазон Raman
-        center = np.interp(wave, [400, 1800], [0, n_points-1])
-        sigma = 5  # Ширина пика
+        x = np.linspace(400, 1800, n_points)
+        center = np.interp(wave, [400, 1800], [0, n_points - 1])
+        sigma = 5
         spectrum = intensity * np.exp(-((x - wave) ** 2) / (2 * sigma ** 2))
         return spectrum.reshape(1, -1)
+
+    # ========== ФУНКЦИИ ДЛЯ КОПИРОВАНИЯ/ВСТАВКИ ==========
+    def setup_entry_context_menu(self, entry_widget):
+        """Добавление контекстного меню и горячих клавиш для поля ввода"""
+
+        # Создаем контекстное меню
+        menu = tk.Menu(entry_widget, tearoff=0)
+        menu.add_command(label="Копировать", command=lambda: self.copy_text(entry_widget))
+        menu.add_command(label="Вставить", command=lambda: self.paste_text(entry_widget))
+        menu.add_separator()
+        menu.add_command(label="Вырезать", command=lambda: self.cut_text(entry_widget))
+        menu.add_command(label="Удалить", command=lambda: entry_widget.delete(0, tk.END))
+        menu.add_separator()
+        menu.add_command(label="Выделить всё", command=lambda: entry_widget.select_range(0, tk.END))
+
+        # Привязываем события
+        entry_widget.bind("<Button-3>", lambda e: self.show_context_menu(e, menu))
+        entry_widget.bind("<Control-c>", lambda e: self.copy_text(entry_widget))
+        entry_widget.bind("<Control-v>", lambda e: self.paste_text(entry_widget))
+        entry_widget.bind("<Control-x>", lambda e: self.cut_text(entry_widget))
+        entry_widget.bind("<Control-a>", lambda e: entry_widget.select_range(0, tk.END))
+
+    def show_context_menu(self, event, menu):
+        """Показ контекстного меню"""
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+
+    def copy_text(self, entry_widget):
+        """Копирование текста в буфер обмена"""
+        try:
+            selected_text = entry_widget.selection_get()
+            self.root.clipboard_clear()
+            self.root.clipboard_append(selected_text)
+        except tk.TclError:
+            # Если ничего не выделено, копируем всё
+            text = entry_widget.get()
+            if text:
+                self.root.clipboard_clear()
+                self.root.clipboard_append(text)
+
+    def paste_text(self, entry_widget):
+        """Вставка текста из буфера обмена"""
+        try:
+            text = self.root.clipboard_get()
+            # Удаляем выделенный текст, если есть
+            try:
+                entry_widget.delete(tk.SEL_FIRST, tk.SEL_LAST)
+            except tk.TclError:
+                pass
+            # Вставляем в текущую позицию курсора
+            entry_widget.insert(tk.INSERT, text)
+        except tk.TclError:
+            pass  # Буфер обмена пуст
+
+    def cut_text(self, entry_widget):
+        """Вырезание текста"""
+        try:
+            selected_text = entry_widget.selection_get()
+            self.root.clipboard_clear()
+            self.root.clipboard_append(selected_text)
+            entry_widget.delete(tk.SEL_FIRST, tk.SEL_LAST)
+        except tk.TclError:
+            pass  # Ничего не выделено
 
     def create_widgets(self):
         """Создание всех элементов интерфейса"""
@@ -174,7 +236,8 @@ class RamanDesignerGUI:
         title = tk.Label(header, text="RAMAN", font=self.fonts['title'], bg=self.colors['accent'], fg='white')
         title.place(x=30, y=20)
 
-        subtitle = tk.Label(header, text="spectra classifier", font=self.fonts['subtitle'], bg=self.colors['accent'], fg='white')
+        subtitle = tk.Label(header, text="spectra classifier", font=self.fonts['subtitle'], bg=self.colors['accent'],
+                            fg='white')
         subtitle.place(x=35, y=65)
 
         # Кнопка визуализации
@@ -202,7 +265,6 @@ class RamanDesignerGUI:
                 messagebox.showerror("Ошибка", f"Файл визуализации не найден:\n{script_path}")
                 return
 
-            # Запускаем отдельный процесс с тем же интерпретатором Python
             subprocess.Popen([sys.executable, script_path], cwd=os.path.dirname(script_path))
 
         except Exception as e:
@@ -211,11 +273,11 @@ class RamanDesignerGUI:
     def create_main_card(self, parent):
         """Создание центральной карточки"""
         card = tk.Frame(parent, bg=self.colors['surface'],
-                       highlightbackground=self.colors['border'], highlightthickness=1, bd=0)
+                        highlightbackground=self.colors['border'], highlightthickness=1, bd=0)
         card.place(x=40, y=130, width=400, height=420)
 
         card_title = tk.Label(card, text="Введите параметры спектра",
-                             font=('Helvetica', 11, 'normal'), bg=self.colors['surface'], fg=self.colors['secondary'])
+                              font=('Helvetica', 11, 'normal'), bg=self.colors['surface'], fg=self.colors['secondary'])
         card_title.place(x=30, y=20)
 
         separator = tk.Frame(card, bg=self.colors['border'], height=1, width=340)
@@ -223,31 +285,37 @@ class RamanDesignerGUI:
 
         # Поле WAVE
         wave_label = tk.Label(card, text="WAVE", font=('Helvetica', 10, 'normal'),
-                             bg=self.colors['surface'], fg=self.colors['secondary'])
+                              bg=self.colors['surface'], fg=self.colors['secondary'])
         wave_label.place(x=30, y=70)
 
         wave_frame = tk.Frame(card, bg=self.colors['border'], bd=0)
         wave_frame.place(x=30, y=95, width=280, height=40)
         self.wave_entry = tk.Entry(wave_frame, font=('Helvetica', 12), bg='white',
-                                  fg=self.colors['primary'], bd=0, highlightthickness=0)
+                                   fg=self.colors['primary'], bd=0, highlightthickness=0)
         self.wave_entry.place(x=10, y=10, width=260, height=20)
+
+        # Добавляем поддержку копирования/вставки для wave_entry
+        self.setup_entry_context_menu(self.wave_entry)
 
         # Поле INTENSITY
         int_label = tk.Label(card, text="INTENSITY", font=('Helvetica', 10, 'normal'),
-                            bg=self.colors['surface'], fg=self.colors['secondary'])
+                             bg=self.colors['surface'], fg=self.colors['secondary'])
         int_label.place(x=30, y=150)
 
         int_frame = tk.Frame(card, bg=self.colors['border'], bd=0)
         int_frame.place(x=30, y=175, width=280, height=40)
         self.intensity_entry = tk.Entry(int_frame, font=('Helvetica', 12), bg='white',
-                                       fg=self.colors['primary'], bd=0, highlightthickness=0)
+                                        fg=self.colors['primary'], bd=0, highlightthickness=0)
         self.intensity_entry.place(x=10, y=10, width=260, height=20)
+
+        # Добавляем поддержку копирования/вставки для intensity_entry
+        self.setup_entry_context_menu(self.intensity_entry)
 
         # Кнопка предсказания
         button = tk.Button(card, text="ПРЕДСКАЗАТЬ", font=('Helvetica', 11, 'bold'),
-                          bg=self.colors['accent'], fg='white',
-                          activebackground=self.colors['accent_soft'], activeforeground='white',
-                          bd=0, cursor='hand2', command=self.predict_class)
+                           bg=self.colors['accent'], fg='white',
+                           activebackground=self.colors['accent_soft'], activeforeground='white',
+                           bd=0, cursor='hand2', command=self.predict_class)
         button.place(x=30, y=240, width=340, height=45)
 
         # Область результата
@@ -256,24 +324,24 @@ class RamanDesignerGUI:
     def create_result_area(self, parent):
         """Создание области результата"""
         result_title = tk.Label(parent, text="РЕЗУЛЬТАТ", font=('Helvetica', 11, 'normal'),
-                               bg=self.colors['surface'], fg=self.colors['secondary'])
+                                bg=self.colors['surface'], fg=self.colors['secondary'])
         result_title.place(x=30, y=310)
 
         result_container = tk.Frame(parent, bg='#F0F0F0',
-                                   highlightbackground=self.colors['border'], highlightthickness=1, bd=0)
+                                    highlightbackground=self.colors['border'], highlightthickness=1, bd=0)
         result_container.place(x=30, y=335, width=340, height=70)
 
         self.result_value = tk.Label(result_container, text="—", font=('Helvetica', 28, 'bold'),
-                                    bg='#F0F0F0', fg=self.colors['accent'])
+                                     bg='#F0F0F0', fg=self.colors['accent'])
         self.result_value.place(relx=0.5, rely=0.5, anchor='center')
 
         # Индикатор уверенности
         self.confidence_label = tk.Label(result_container, text="", font=('Helvetica', 9),
-                                        bg='#F0F0F0', fg=self.colors['secondary'])
+                                         bg='#F0F0F0', fg=self.colors['secondary'])
         self.confidence_label.place(x=10, y=5)
 
         self.time_indicator = tk.Label(result_container, text="", font=('Helvetica', 8),
-                                      bg='#F0F0F0', fg=self.colors['secondary'])
+                                       bg='#F0F0F0', fg=self.colors['secondary'])
         self.time_indicator.place(x=290, y=50)
 
     def create_footer(self, parent):
@@ -282,11 +350,11 @@ class RamanDesignerGUI:
         footer.pack(side=tk.BOTTOM, fill=tk.X)
 
         self.status_label = tk.Label(footer, text="ожидание ввода", font=('Helvetica', 9),
-                                    bg=self.colors['bg'], fg=self.colors['secondary'])
+                                     bg=self.colors['bg'], fg=self.colors['secondary'])
         self.status_label.pack(side=tk.LEFT, padx=20, pady=10)
 
         team = tk.Label(footer, text="Экзаменационная группа", font=('Helvetica', 9),
-                       bg=self.colors['bg'], fg=self.colors['secondary'])
+                        bg=self.colors['bg'], fg=self.colors['secondary'])
         team.pack(side=tk.RIGHT, padx=20, pady=10)
 
     def apply_styles(self):
@@ -307,26 +375,20 @@ class RamanDesignerGUI:
             wave_val = float(wave)
             int_val = float(intensity)
 
-            # Предсказание через модель
             pred_class, probs = self.predict_with_model(wave_val, int_val)
-            
-            # Обновляем результат
+
             self.result_value.config(text=pred_class.upper())
-            
-            # Цвет в зависимости от класса
+
             colors = {'control': '#00B894', 'endo': '#E17055', 'exo': '#6C5CE7'}
             self.result_value.config(fg=colors.get(pred_class, self.colors['accent']))
-            
-            # Отображаем уверенность
+
             confidence = probs[self.classes.index(pred_class)] * 100
             self.confidence_label.config(text=f"уверенность: {confidence:.1f}%")
-            
-            # Время и статус
+
             current_time = datetime.now().strftime("%H:%M")
             self.time_indicator.config(text=current_time)
             self.status_label.config(text=f"предсказано: {pred_class}", fg=self.colors['success'])
-            
-            # Сброс статуса
+
             self.root.after(3000, self.reset_status)
 
         except ValueError:
@@ -358,5 +420,4 @@ def main():
 
 
 if __name__ == "__main__":
-
     main()

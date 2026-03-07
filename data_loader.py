@@ -1,4 +1,3 @@
-# data_loader.py
 import os
 import numpy as np
 import torch
@@ -101,7 +100,7 @@ class TxtDataset(Dataset):
                 error_count += 1
                 continue
             
-            # 🔒 ЖЁСТКАЯ ПРОВЕРКА: тип и форма
+            # ЖЁСТКАЯ ПРОВЕРКА: тип и форма
             if isinstance(features, np.ndarray) and features.shape == (4,):
                 self.file_records.append({"path": fp, "label": lbl, "id": file_id})
                 self.samples.append((features, lbl, file_id))
@@ -131,12 +130,12 @@ class TxtDataset(Dataset):
                 np.array([], dtype=np.int32)
             )
         
-        # 🔒 Извлекаем данные
+        # Извлекаем данные
         xs = [s[0] for s in self.samples]
         ys = [s[1] for s in self.samples]
         files = [s[2] for s in self.samples]
         
-        # 🔒 Отладка: проверяем типы перед vstack
+        # Отладка: проверяем типы перед vstack
         for i, x in enumerate(xs[:5]):
             if not isinstance(x, np.ndarray):
                 print(f"⚠️ xs[{i}] это {type(x)}, конвертируем...")
@@ -147,7 +146,7 @@ class TxtDataset(Dataset):
                 if xs[i].shape != (4,):
                     xs[i] = np.pad(xs[i], (0, 4-len(xs[i]))) # Дополняем нулями если мало
         
-        # 🔒 Финальная проверка
+        # Финальная проверка
         shapes = [x.shape for x in xs]
         if len(set(shapes)) > 1:
             print(f"❌ Разные формы массивов: {set(shapes)}")
@@ -170,4 +169,5 @@ class TxtDataset(Dataset):
                 np.empty((0, 4), dtype=np.float32), 
                 np.array([], dtype=np.int64), 
                 np.array([], dtype=np.int32)
+
             )

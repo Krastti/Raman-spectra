@@ -1,6 +1,6 @@
 # 🧬 RamanHSP70: Классификация спектров биологических тканей
 
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Status](https://img.shields.io/badge/status-active-success.svg)]()
 
@@ -42,12 +42,7 @@ pip install -r requirements.txt
 ```
 
 ### 2. Структура данных
-Ожидаемая структура папки `data/`:
-```text
-data/
-├── raw/              # Исходные спектры (.txt)
-├── processed/        # Очищенные данные (автоматически)
-```
+
 
 ### 3. Запуск пайплайна
 
@@ -90,8 +85,6 @@ data/
 | Random Forest | 0.83 | 0.82 | 0.97 |
 | **XGBoost** | **0.96** | **0.90** | **0.96** |
 
-![SHAP Summary](assets/shap_summary.png)
-
 ---
 
 ## 📂 Структура репозитория
@@ -107,16 +100,13 @@ data/
 
 ## 🤝 Команда
 
-*   **Team Lead:** [Имя Фамилия]
-*   **ML Engineer:** [Имя Фамилия]
-*   **Data Analyst:** [Имя Фамилия]
+*   **Team Leader:** [Сальцев Ярослав]
+*   **ML Engineer:** [Буцких Всеволод]
+*   **ML Enginner:** [Копанев Кирилл]
+*   **Data Analyst:** [Плотников Андрей]
 
 ---
 
 ## 📄 Лицензия
 
 Этот проект распространяется под лицензией MIT. См. файл [LICENSE](LICENSE) для деталей.
-
----
-
-> 💡 **Совет:** Для воспроизводимости результатов фиксируйте `random_state` во всех экспериментах и используйте `DVC` для версионирования данных.

@@ -83,7 +83,7 @@ pip install -r requirements.txt
 | Модель | Accuracy | F1-Score (weighted) | ROC-AUC (OvR) |
 | :--- | :---: | :---: | :---: |
 | Random Forest | 0.83 | 0.82 | 0.97 |
-| **XGBoost** | **0.96** | **0.90** | **0.96** |
+| **XGBoost** | **0.94** | **0.90** | **0.94** |
 
 ---
 

@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Status](https://img.shields.io/badge/status-active-success.svg)]()
 
-> **Задача:** Разработка pipelines машинного обучения для классификации рамановских спектров биологических тканей с целью определения экспериментальной группы: **Контроль**, **Эндогенная экспрессия HSP70**, **Экзогенная экспрессия HSP70**.
+> **Задача:** Разработка решения на основе машинного обучения для классификации рамановских спектров биологических тканей с целью определения экспериментальной группы: **Контроль**, **Эндогенная экспрессия HSP70**, **Экзогенная экспрессия HSP70**.
 
 ---
 
@@ -23,9 +23,9 @@
 
 ## 🛠 Технологический стек
 
-*   **Язык:** Python 3.9+
-*   **Обработка сигналов:** `numpy`, `scipy`, `spectral` (для базлайна и сглаживания)
-*   **ML Frameworks:** `scikit-learn`, `xgboost`, `pytorch` (для автоэнкодеров)
+*   **Язык:** Python 3.13
+*   **Обработка сигналов:** `numpy`, `scipy`, `spectral`
+*   **ML Frameworks:** `scikit-learn`, `xgboost`, `pytorch`
 *   **Визуализация:** `matplotlib`, `seaborn`, `plotly`
 *   **Интерпретация:** `shap`, `eli5`
 
@@ -36,8 +36,8 @@
 ### 1. Установка зависимостей
 
 ```bash
-git clone https://github.com/your-username/RamanHSP70.git
-cd RamanHSP70
+git clone https://github.com/Krastti/Raman-spectra.git
+cd Raman-spectra
 pip install -r requirements.txt
 ```
 
@@ -45,27 +45,11 @@ pip install -r requirements.txt
 Ожидаемая структура папки `data/`:
 ```text
 data/
-├── raw/              # Исходные спектры (.csv, .txt, .spc)
+├── raw/              # Исходные спектры (.txt)
 ├── processed/        # Очищенные данные (автоматически)
-└── labels.csv        # Разметка образцов (ID样本, Class)
 ```
 
 ### 3. Запуск пайплайна
-
-**Полный цикл (обучение + оценка):**
-```bash
-python src/main.py --config configs/default.yaml
-```
-
-**Только предобработка:**
-```bash
-python src/preprocessing.py --input data/raw --output data/processed
-```
-
-**Визуализация значимых пиков:**
-```bash
-python src/interpretability.py --model models/best_model.pkl
-```
 
 ---
 
@@ -103,41 +87,14 @@ python src/interpretability.py --model models/best_model.pkl
 
 | Модель | Accuracy | F1-Score (weighted) | ROC-AUC (OvR) |
 | :--- | :---: | :---: | :---: |
-| SVM (RBF) | 0.85 | 0.84 | 0.92 |
-| Random Forest | 0.88 | 0.87 | 0.94 |
-| **XGBoost + PCA** | **0.91** | **0.90** | **0.96** |
-| 1D-CNN | 0.89 | 0.88 | 0.95 |
-
-*> Результаты могут варьироваться в зависимости от случайного seed.*
-
-### 🔍 Интерпретация
-С помощью SHAP values были выявлены ключевые спектральные области, влияющие на классификацию:
-*   **1000–1100 cm⁻¹:** Фенилаланин (структура белков).
-*   **1440–1450 cm⁻¹:** CH₂ деформация (липиды/белки).
-*   **1650–1680 cm⁻¹:** Амид I (вторичная структура белков, маркер HSP70).
+| Random Forest | 0.83 | 0.82 | 0.97 |
+| **XGBoost** | **0.96** | **0.90** | **0.96** |
 
 ![SHAP Summary](assets/shap_summary.png)
 
 ---
 
 ## 📂 Структура репозитория
-
-```text
-.
-├── configs/              # YAML конфигурации экспериментов
-├── data/                 # Датасеты (игнорируются в git)
-├── notebooks/            # Jupyter ноутбуки для EDA
-├── src/
-│   ├── preprocessing.py  # Модули очистки спектров
-│   ├── features.py       # Извлечение признаков
-│   ├── models.py         # Архитектуры моделей
-│   ├── train.py          # Скрипт обучения
-│   └── utils.py          # Утилиты и метрики
-├── tests/                # Юнит-тесты
-├── requirements.txt      # Зависимости
-├── README.md             # Этот файл
-└── documentation/        # Теоретическая база (включая uploaded PDF)
-```
 
 ---
 
